@@ -67,22 +67,30 @@ jobs:
           corepack prepare pnpm@9.15.0 --activate
 
       - name: Set release version
+        shell: bash
+        env:
+          GITHUB_REF: ${{ github.ref }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/desktop-v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/desktop-v}"
-          else
-            MAJMIN=$(node -p "require('./apps/desktop/package.json').version.split('.').slice(0,2).join('.')")
-            VERSION="${MAJMIN}.${{ github.run_number }}"
-          fi
-          echo "RELEASE_VERSION=${VERSION}" >> "$GITHUB_ENV"
-          node -e "
-            const fs = require('fs');
-            const p = 'apps/desktop/package.json';
-            const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
-            pkg.version = process.env.RELEASE_VERSION;
-            fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
-          "
-          echo "Building desktop v${VERSION}"
+          node <<'NODE'
+          const fs = require('fs');
+          const pkgPath = 'apps/desktop/package.json';
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+          const ref = process.env.GITHUB_REF || '';
+          let version;
+          if (ref.startsWith('refs/tags/desktop-v')) {
+            version = ref.slice('refs/tags/desktop-v'.length);
+          } else {
+            const [maj, min] = pkg.version.split('.');
+            version = `${maj}.${min}.${process.env.RUN_NUMBER}`;
+          }
+          pkg.version = version;
+          fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+          if (process.env.GITHUB_ENV) {
+            fs.appendFileSync(process.env.GITHUB_ENV, `RELEASE_VERSION=${version}\n`);
+          }
+          console.log(`Building desktop v${version}`);
+          NODE
 
       - name: Install
         run: pnpm install --frozen-lockfile
