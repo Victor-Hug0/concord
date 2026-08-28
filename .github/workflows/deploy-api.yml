@@ -1,7 +1,12 @@
-# CD — deploy da API na VPS após CI passar na main (ou manual).
+# CD — deploy da API na VPS (self-hosted runner + git pull).
 #
-# Secrets: SSH_HOST, SSH_USER, SSH_PRIVATE_KEY, DEPLOY_PATH
-# Opcional: SSH_PORT (padrão 22)
+# Roda NO servidor (pasta ~/actions-runner), sem SCP/SSH da nuvem.
+#
+# Secrets / Variables:
+#   DEPLOY_PATH  — pasta do projeto (ex.: /home/tpescolar/clone-discord)
+#                  pode ser secret OU variable (vars.DEPLOY_PATH)
+#
+# Na VPS: clone git do repo + .env.production + runner online.
 
 name: Deploy API
 
@@ -85,91 +90,110 @@ jobs:
   deploy:
     needs: changes
     if: needs.changes.outputs.api == 'true'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     environment: production
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.changes.outputs.sha }}
-
-      - name: Verificar secrets (debug)
+      - name: Verificar caminho e runner
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
           DEPLOY_SHA: ${{ needs.changes.outputs.sha }}
         run: |
-          echo "=== Debug deploy (valores sensíveis podem aparecer como *** no log) ==="
+          echo "=== Debug deploy (self-hosted) ==="
+          echo "hostname: $(hostname)"
+          echo "user: $(whoami)"
+          echo "pwd: $(pwd)"
           echo "DEPLOY_SHA: ${DEPLOY_SHA}"
-          echo "SSH_HOST: ${SSH_HOST:-[VAZIO]}"
-          echo "SSH_USER: ${SSH_USER:-[VAZIO]}"
           echo "DEPLOY_PATH: ${DEPLOY_PATH:-[VAZIO]}"
-          echo "SSH_PORT: ${SSH_PORT:-22}"
-          if [ -z "${SSH_PRIVATE_KEY}" ]; then
-            echo "SSH_PRIVATE_KEY: [VAZIO] — secret não configurado"
+          if [ -z "${DEPLOY_PATH}" ]; then
+            echo "ERRO: configure DEPLOY_PATH (Secret ou Variable)"
+            echo "Ex.: /home/tpescolar/clone-discord"
             exit 1
           fi
-          echo "SSH_PRIVATE_KEY: definido (${#SSH_PRIVATE_KEY} caracteres)"
-          if printf '%s' "$SSH_PRIVATE_KEY" | head -1 | grep -q 'BEGIN'; then
-            echo "SSH_PRIVATE_KEY: formato OK (linha -----BEGIN...)"
-          else
-            echo "SSH_PRIVATE_KEY: ERRO — deve começar com -----BEGIN OPENSSH PRIVATE KEY----- ou -----BEGIN RSA PRIVATE KEY-----"
+          if [ ! -d "${DEPLOY_PATH}" ]; then
+            echo "ERRO: pasta não existe: ${DEPLOY_PATH}"
             exit 1
           fi
-          if printf '%s' "$SSH_PRIVATE_KEY" | tail -1 | grep -q 'END'; then
-            echo "SSH_PRIVATE_KEY: termina com -----END... (OK)"
-          else
-            echo "SSH_PRIVATE_KEY: AVISO — última linha não é -----END... (chave truncada?)"
-          fi
+          echo "DEPLOY_PATH existe: OK"
           echo "=== Fim debug ==="
 
-      - name: Enviar código para a VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          source: "apps/,packages/,infra/,package.json,pnpm-lock.yaml,pnpm-workspace.yaml,tsconfig.base.json,.dockerignore"
-          target: ${{ secrets.DEPLOY_PATH }}
-          strip_components: 0
-          overwrite: true
+      - name: Git pull (preserva .env.production)
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_SHA: ${{ needs.changes.outputs.sha }}
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_PATH}"
 
-      - name: Build e reiniciar API na VPS
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          script_stop: true
-          script: |
-            set -euo pipefail
-            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
-            DEPLOY_SHA="${{ needs.changes.outputs.sha }}"
-            echo "=== Deploy API ==="
-            echo "path: ${DEPLOY_PATH}"
-            echo "sha:  ${DEPLOY_SHA}"
-            cd "${DEPLOY_PATH}"
-            test -f infra/docker/.env.production || { echo "Falta infra/docker/.env.production"; exit 1; }
-            test -f apps/api/src/auth/google-auth.guard.ts && echo "google-auth.guard.ts presente" || echo "WARN: google-auth.guard.ts ausente no disco"
-            export DEPLOY_SHA
+          ENV_FILE="infra/docker/.env.production"
+          ENV_BACKUP="/tmp/concord-env.production.backup.$$"
+
+          if [ -f "${ENV_FILE}" ]; then
+            cp -a "${ENV_FILE}" "${ENV_BACKUP}"
+            echo "Backup .env.production → ${ENV_BACKUP}"
+          else
+            echo "AVISO: ${ENV_FILE} ainda não existe na VPS"
+            ENV_BACKUP=""
+          fi
+
+          if [ ! -d .git ]; then
+            echo "ERRO: ${DEPLOY_PATH} não é um repositório git."
+            echo "Na VPS: git clone git@github.com:Victor-Hug0/concord.git ${DEPLOY_PATH}"
+            exit 1
+          fi
+
+          echo "remote: $(git remote get-url origin)"
+          git fetch origin main
+          git reset --hard "origin/main"
+          # Preferir o SHA do CI quando disponível
+          if [ -n "${DEPLOY_SHA}" ] && git rev-parse --verify "${DEPLOY_SHA}^{commit}" >/dev/null 2>&1; then
+            git checkout --force "${DEPLOY_SHA}"
+            echo "checkout SHA: ${DEPLOY_SHA}"
+          else
+            echo "usando origin/main: $(git rev-parse HEAD)"
+          fi
+
+          if [ -n "${ENV_BACKUP}" ] && [ -f "${ENV_BACKUP}" ]; then
+            mkdir -p infra/docker
+            cp -a "${ENV_BACKUP}" "${ENV_FILE}"
+            rm -f "${ENV_BACKUP}"
+            echo ".env.production restaurado"
+          fi
+
+          test -f "${ENV_FILE}" || { echo "Falta ${ENV_FILE}"; exit 1; }
+          ls -la apps/api/src/auth/google-auth.guard.ts 2>/dev/null \
+            && echo "google-auth.guard.ts presente" \
+            || echo "WARN: google-auth.guard.ts ausente"
+
+      - name: Build e reiniciar API
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_SHA: ${{ needs.changes.outputs.sha }}
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_PATH}"
+          export DEPLOY_SHA
+
+          echo "=== Deploy API ==="
+          echo "path: ${DEPLOY_PATH}"
+          echo "sha:  ${DEPLOY_SHA}"
+
+          docker compose -f infra/docker/docker-compose.prod.yml \
+            --env-file infra/docker/.env.production \
+            build --no-cache api
+
+          docker compose -f infra/docker/docker-compose.prod.yml \
+            --env-file infra/docker/.env.production \
+            up -d --force-recreate --wait api
+
+          echo "Health local:"
+          curl -s http://127.0.0.1:3000/health
+          echo ""
+
+          if ! curl -sf "http://127.0.0.1:3000/health" | grep -q "${DEPLOY_SHA}"; then
+            echo "ERRO: /health não contém o SHA esperado (${DEPLOY_SHA})"
             docker compose -f infra/docker/docker-compose.prod.yml \
-              --env-file infra/docker/.env.production \
-              build --no-cache api
-            docker compose -f infra/docker/docker-compose.prod.yml \
-              --env-file infra/docker/.env.production \
-              up -d --force-recreate --wait api
-            echo "Health local:"
-            curl -s http://127.0.0.1:3000/health
-            echo ""
-            if ! curl -sf "http://127.0.0.1:3000/health" | grep -q "${DEPLOY_SHA}"; then
-              echo "ERRO: /health não contém o SHA esperado (${DEPLOY_SHA})"
-              docker compose -f infra/docker/docker-compose.prod.yml \
-                --env-file infra/docker/.env.production logs api --tail 80
-              exit 1
-            fi
-            echo "Deploy confirmado — SHA no container bate com o commit."
+              --env-file infra/docker/.env.production logs api --tail 80
+            exit 1
+          fi
+          echo "Deploy confirmado — SHA no container bate com o commit."

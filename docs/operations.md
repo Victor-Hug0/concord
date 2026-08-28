@@ -31,34 +31,24 @@ Passo a passo completo: [publishing.md](./publishing.md).
 
 Workflow: `.github/workflows/deploy-api.yml`
 
-- Dispara após o **CI** passar na `main` (se mudou API/shared/docker)
-- Ou manual: **Actions → Deploy API → Run workflow** (sempre deploya)
-- O runner **copia o código** para a VPS (SCP) — não depende de `git pull` na VPS
-- Depois: `docker compose ... up -d --build api` + health check
+- Roda no **self-hosted runner** da VPS (`~/actions-runner`) — sem SCP/SSH da nuvem (evita timeout na porta 22)
+- Após o **CI** passar na `main` (se mudou API/shared/docker), ou **Run workflow**
+- Na VPS: `git fetch` + checkout do SHA + restaura `.env.production` + `docker compose build/up`
 
-**Se o workflow ficou verde mas nada mudou:** abra **Deploy API** e veja o job `skip-notice` — o deploy foi **ignorado** porque o commit não tocou na API. Use **Run workflow** para forçar.
+Secret ou Variable:
 
-Secrets no GitHub (**Settings → Secrets and variables → Actions**):
-
-| Secret | Exemplo |
-|--------|---------|
-| `SSH_HOST` | `147.93.186.159` |
-| `SSH_USER` | `tpescolar` |
-| `SSH_PRIVATE_KEY` | chave privada SSH (Actions → VPS) |
+| Nome | Exemplo |
+|------|---------|
 | `DEPLOY_PATH` | `/home/tpescolar/clone-discord` |
 
-Na VPS: pasta do projeto + `infra/docker/.env.production` (não é sobrescrito). **Não precisa** mais de clone git para o CD.
+### Setup na VPS (uma vez)
 
-Chave SSH: a **pública** vai em `~/.ssh/authorized_keys` do `tpescolar` na VPS. É **diferente** de qualquer chave da VPS para o GitHub.
+1. Projeto como clone git + `.env.production` preservado
+2. Runner online: `cd ~/actions-runner && ./run.sh` (ou serviço systemd)
+3. GitHub → **Settings → Actions → Runners** → runner **Idle**
+4. Configure `DEPLOY_PATH`
 
-Teste manual na VPS:
-
-```bash
-cd ~/clone-discord
-docker compose -f infra/docker/docker-compose.prod.yml \
-  --env-file infra/docker/.env.production up -d --build api
-curl -s http://127.0.0.1:3000/health
-```
+O `.env.production` é **preservado** (backup → git → restore).
 
 ## Empacote
 
