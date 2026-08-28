@@ -31,9 +31,12 @@ Passo a passo completo: [publishing.md](./publishing.md).
 
 Workflow: `.github/workflows/deploy-api.yml`
 
-- Dispara após o **CI** passar na `main` (só se mudou API/shared/docker/lockfile)
-- Ou manual: **Actions → Deploy API → Run workflow**
-- Na VPS: `git pull` + `docker compose ... up -d --build api` + health check
+- Dispara após o **CI** passar na `main` (se mudou API/shared/docker)
+- Ou manual: **Actions → Deploy API → Run workflow** (sempre deploya)
+- O runner **copia o código** para a VPS (SCP) — não depende de `git pull` na VPS
+- Depois: `docker compose ... up -d --build api` + health check
+
+**Se o workflow ficou verde mas nada mudou:** abra **Deploy API** e veja o job `skip-notice` — o deploy foi **ignorado** porque o commit não tocou na API. Use **Run workflow** para forçar.
 
 Secrets no GitHub (**Settings → Secrets and variables → Actions**):
 
@@ -41,13 +44,21 @@ Secrets no GitHub (**Settings → Secrets and variables → Actions**):
 |--------|---------|
 | `SSH_HOST` | `147.93.186.159` |
 | `SSH_USER` | `tpescolar` |
-| `SSH_PRIVATE_KEY` | conteúdo da chave privada SSH |
+| `SSH_PRIVATE_KEY` | chave privada SSH (Actions → VPS) |
 | `DEPLOY_PATH` | `/home/tpescolar/clone-discord` |
-| `SSH_PORT` | `22` (opcional) |
 
-Na VPS, o projeto deve ser um clone git com `origin` apontando para o GitHub. O `.env.production` **não** é alterado pelo deploy.
+Na VPS: pasta do projeto + `infra/docker/.env.production` (não é sobrescrito). **Não precisa** mais de clone git para o CD.
 
-Opcional: em **Settings → Environments**, crie `production` para exigir aprovação antes do deploy.
+Chave SSH: a **pública** vai em `~/.ssh/authorized_keys` do `tpescolar` na VPS. É **diferente** de qualquer chave da VPS para o GitHub.
+
+Teste manual na VPS:
+
+```bash
+cd ~/clone-discord
+docker compose -f infra/docker/docker-compose.prod.yml \
+  --env-file infra/docker/.env.production up -d --build api
+curl -s http://127.0.0.1:3000/health
+```
 
 ## Empacote
 

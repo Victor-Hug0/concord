@@ -14,6 +14,8 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
+      args:
+        DEPLOY_SHA: ${DEPLOY_SHA:-local}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"

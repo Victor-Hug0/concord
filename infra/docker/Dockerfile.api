@@ -17,7 +17,9 @@ RUN pnpm --filter @concord/shared build \
   && pnpm --filter @concord/api build
 
 FROM base AS runner
+ARG DEPLOY_SHA=local
 ENV NODE_ENV=production
+ENV DEPLOY_SHA=${DEPLOY_SHA}
 WORKDIR /app
 
 COPY --from=build /app /app

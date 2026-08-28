@@ -1,14 +1,7 @@
 # CD — deploy da API na VPS após CI passar na main (ou manual).
 #
-# Secrets (Settings → Secrets and variables → Actions):
-#   SSH_HOST          — IP ou host da VPS (ex.: 147.93.186.159)
-#   SSH_USER          — usuário SSH (ex.: tpescolar)
-#   SSH_PRIVATE_KEY   — chave privada (conteúdo do id_ed25519 / id_rsa)
-#   DEPLOY_PATH       — pasta do projeto na VPS (ex.: /home/tpescolar/clone-discord)
-# Opcional:
-#   SSH_PORT          — padrão 22
-#
-# Na VPS: clone git do repo + .env.production configurado (não sobrescrito pelo deploy).
+# Secrets: SSH_HOST, SSH_USER, SSH_PRIVATE_KEY, DEPLOY_PATH
+# Opcional: SSH_PORT (padrão 22)
 
 name: Deploy API
 
@@ -18,6 +11,9 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-api
@@ -30,14 +26,30 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
-      api: ${{ steps.filter.outputs.api }}
+      api: ${{ steps.result.outputs.api }}
+      sha: ${{ steps.sha.outputs.sha }}
     steps:
+      - id: sha
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy manual (ignora filtro de paths)
+        if: github.event_name == 'workflow_dispatch'
+        id: manual
+        run: echo "api=true" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        if: github.event_name == 'workflow_run'
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
       - uses: dorny/paths-filter@v3
+        if: github.event_name == 'workflow_run'
         id: filter
         with:
           filters: |
@@ -45,21 +57,55 @@ jobs:
               - 'apps/api/**'
               - 'packages/shared/**'
               - 'infra/docker/**'
+              - '.github/workflows/deploy-api.yml'
               - 'pnpm-lock.yaml'
               - 'package.json'
               - 'pnpm-workspace.yaml'
               - 'tsconfig.base.json'
+              - '.dockerignore'
+
+      - id: result
+        run: |
+          if [ "${{ steps.manual.outputs.api }}" = "true" ]; then
+            echo "api=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "api=${{ steps.filter.outputs.api }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  skip-notice:
+    needs: changes
+    if: needs.changes.outputs.api != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Nenhum deploy necessário
+        run: |
+          echo "::notice::Deploy API ignorado — o commit não alterou API/shared/docker."
+          echo "Para forçar: Actions → Deploy API → Run workflow"
 
   deploy:
     needs: changes
-    if: >
-      needs.changes.outputs.api == 'true' ||
-      github.event_name == 'workflow_dispatch'
+    if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     environment: production
 
     steps:
-      - name: Deploy on VPS via SSH
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.changes.outputs.sha }}
+
+      - name: Enviar código para a VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: "apps/,packages/,infra/,package.json,pnpm-lock.yaml,pnpm-workspace.yaml,tsconfig.base.json,.dockerignore"
+          target: ${{ secrets.DEPLOY_PATH }}
+          strip_components: 0
+          overwrite: true
+
+      - name: Build e reiniciar API na VPS
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -69,21 +115,28 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            cd "${{ secrets.DEPLOY_PATH }}"
-            git fetch origin main
-            git reset --hard origin/main
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+            DEPLOY_SHA="${{ needs.changes.outputs.sha }}"
+            echo "=== Deploy API ==="
+            echo "path: ${DEPLOY_PATH}"
+            echo "sha:  ${DEPLOY_SHA}"
+            cd "${DEPLOY_PATH}"
+            test -f infra/docker/.env.production || { echo "Falta infra/docker/.env.production"; exit 1; }
+            test -f apps/api/src/auth/google-auth.guard.ts && echo "google-auth.guard.ts presente" || echo "WARN: google-auth.guard.ts ausente no disco"
+            export DEPLOY_SHA
             docker compose -f infra/docker/docker-compose.prod.yml \
               --env-file infra/docker/.env.production \
-              up -d --build api
-            echo "Waiting for API health..."
-            for i in $(seq 1 30); do
-              if curl -sf http://127.0.0.1:3000/health >/dev/null; then
-                curl -s http://127.0.0.1:3000/health
-                exit 0
-              fi
-              sleep 2
-            done
-            echo "API health check failed"
+              build --no-cache api
             docker compose -f infra/docker/docker-compose.prod.yml \
-              --env-file infra/docker/.env.production logs api --tail 80
-            exit 1
+              --env-file infra/docker/.env.production \
+              up -d --force-recreate --wait api
+            echo "Health local:"
+            curl -s http://127.0.0.1:3000/health
+            echo ""
+            if ! curl -sf "http://127.0.0.1:3000/health" | grep -q "${DEPLOY_SHA}"; then
+              echo "ERRO: /health não contém o SHA esperado (${DEPLOY_SHA})"
+              docker compose -f infra/docker/docker-compose.prod.yml \
+                --env-file infra/docker/.env.production logs api --tail 80
+              exit 1
+            fi
+            echo "Deploy confirmado — SHA no container bate com o commit."
