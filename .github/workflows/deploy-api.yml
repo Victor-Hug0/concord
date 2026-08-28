@@ -93,6 +93,39 @@ jobs:
         with:
           ref: ${{ needs.changes.outputs.sha }}
 
+      - name: Verificar secrets (debug)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          DEPLOY_SHA: ${{ needs.changes.outputs.sha }}
+        run: |
+          echo "=== Debug deploy (valores sensíveis podem aparecer como *** no log) ==="
+          echo "DEPLOY_SHA: ${DEPLOY_SHA}"
+          echo "SSH_HOST: ${SSH_HOST:-[VAZIO]}"
+          echo "SSH_USER: ${SSH_USER:-[VAZIO]}"
+          echo "DEPLOY_PATH: ${DEPLOY_PATH:-[VAZIO]}"
+          echo "SSH_PORT: ${SSH_PORT:-22}"
+          if [ -z "${SSH_PRIVATE_KEY}" ]; then
+            echo "SSH_PRIVATE_KEY: [VAZIO] — secret não configurado"
+            exit 1
+          fi
+          echo "SSH_PRIVATE_KEY: definido (${#SSH_PRIVATE_KEY} caracteres)"
+          if printf '%s' "$SSH_PRIVATE_KEY" | head -1 | grep -q 'BEGIN'; then
+            echo "SSH_PRIVATE_KEY: formato OK (linha -----BEGIN...)"
+          else
+            echo "SSH_PRIVATE_KEY: ERRO — deve começar com -----BEGIN OPENSSH PRIVATE KEY----- ou -----BEGIN RSA PRIVATE KEY-----"
+            exit 1
+          fi
+          if printf '%s' "$SSH_PRIVATE_KEY" | tail -1 | grep -q 'END'; then
+            echo "SSH_PRIVATE_KEY: termina com -----END... (OK)"
+          else
+            echo "SSH_PRIVATE_KEY: AVISO — última linha não é -----END... (chave truncada?)"
+          fi
+          echo "=== Fim debug ==="
+
       - name: Enviar código para a VPS
         uses: appleboy/scp-action@v0.1.7
         with:
