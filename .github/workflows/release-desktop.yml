@@ -1,10 +1,7 @@
 # Release desktop — Windows (.exe) + Linux (AppImage/.deb) na GitHub Release.
 #
-# Dispara automaticamente após CI passar na main (se mudou desktop/shared).
-# Também: tag desktop-v* ou Actions → Run workflow.
-#
-# Versão auto (merge na main): MAJOR.MINOR do package.json + run number (ex.: 0.1.42).
-# Versão manual (tag): desktop-v1.2.3 → 1.2.3
+# Dispara após CI passar na main, tag desktop-v*, ou manual (Run workflow).
+# Versão auto: MAJOR.MINOR do package.json + run number (ex.: 0.1.42).
 
 name: Release desktop
 
@@ -26,47 +23,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  changes:
+  gate:
     if: >
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.ref, 'refs/tags/desktop-v') ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     outputs:
-      desktop: ${{ steps.result.outputs.desktop }}
+      sha: ${{ steps.sha.outputs.sha }}
     steps:
-      - name: Release all (manual or tag)
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/desktop-v')
-        id: force
-        run: echo "desktop=true" >> $GITHUB_OUTPUT
-
-      - uses: actions/checkout@v4
-        if: github.event_name == 'workflow_run'
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
-
-      - uses: dorny/paths-filter@v3
-        if: github.event_name == 'workflow_run'
-        id: filter
-        with:
-          filters: |
-            desktop:
-              - 'apps/desktop/**'
-              - 'packages/shared/**'
-              - '.github/workflows/release-desktop.yml'
-
-      - id: result
+      - id: sha
         run: |
-          if [ "${{ steps.force.outputs.desktop }}" = "true" ]; then
-            echo "desktop=true" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
           else
-            echo "desktop=${{ steps.filter.outputs.desktop }}" >> $GITHUB_OUTPUT
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           fi
 
   release:
-    needs: changes
-    if: needs.changes.outputs.desktop == 'true'
+    needs: gate
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -80,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ needs.gate.outputs.sha || github.ref }}
 
       - uses: actions/setup-node@v4
         with:

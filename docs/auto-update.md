@@ -55,7 +55,7 @@ No **publish** você ainda pode usar GitHub e espelhar os arquivos para o host g
 
 Workflow: `.github/workflows/release-desktop.yml`
 
-- **Automático:** após o **CI** passar na `main`, se mudou `apps/desktop/` ou `packages/shared/`
+- **Automático:** após o **CI** passar na `main` (todo merge, sem filtro de paths)
 - Versão gerada no CI: `0.1.<run>` (ex.: `0.1.42`) — sempre sobe para o auto-update funcionar
 - Build **Windows** (NSIS) + **Linux** (AppImage + `.deb`) em paralelo
 - Publica na **GitHub Release** com `latest.yml` / `latest-linux.yml`
