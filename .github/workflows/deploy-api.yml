@@ -1,0 +1,89 @@
+# CD — deploy da API na VPS após CI passar na main (ou manual).
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   SSH_HOST          — IP ou host da VPS (ex.: 147.93.186.159)
+#   SSH_USER          — usuário SSH (ex.: tpescolar)
+#   SSH_PRIVATE_KEY   — chave privada (conteúdo do id_ed25519 / id_rsa)
+#   DEPLOY_PATH       — pasta do projeto na VPS (ex.: /home/tpescolar/clone-discord)
+# Opcional:
+#   SSH_PORT          — padrão 22
+#
+# Na VPS: clone git do repo + .env.production configurado (não sobrescrito pelo deploy).
+
+name: Deploy API
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+              - 'packages/shared/**'
+              - 'infra/docker/**'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig.base.json'
+
+  deploy:
+    needs: changes
+    if: >
+      needs.changes.outputs.api == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Deploy on VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose -f infra/docker/docker-compose.prod.yml \
+              --env-file infra/docker/.env.production \
+              up -d --build api
+            echo "Waiting for API health..."
+            for i in $(seq 1 30); do
+              if curl -sf http://127.0.0.1:3000/health >/dev/null; then
+                curl -s http://127.0.0.1:3000/health
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "API health check failed"
+            docker compose -f infra/docker/docker-compose.prod.yml \
+              --env-file infra/docker/.env.production logs api --tail 80
+            exit 1

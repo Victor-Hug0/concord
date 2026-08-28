@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_URL: https://concord.televei.dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable corepack / pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared
+        run: pnpm --filter @concord/shared build
+
+      - name: Prisma generate
+        run: pnpm --filter @concord/api exec prisma generate
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Build API
+        run: pnpm --filter @concord/api build
+
+      - name: Build desktop
+        run: pnpm --filter @concord/desktop build
+
+  docker-api:
+    runs-on: ubuntu-latest
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API Docker image
+        run: docker build -f infra/docker/Dockerfile.api -t concord-api:ci .

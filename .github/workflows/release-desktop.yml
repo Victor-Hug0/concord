@@ -42,6 +42,7 @@ jobs:
       - name: Release desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Opcional: feed genérico no client (não afeta o publish do builder)
-          # UPDATE_FEED_URL: https://updates.example.com/concord
+          GH_OWNER: ${{ github.repository_owner }}
+          GH_REPO: ${{ github.event.repository.name }}
+          VITE_API_URL: https://concord.televei.dev
         run: pnpm --filter @concord/desktop ${{ matrix.script }}

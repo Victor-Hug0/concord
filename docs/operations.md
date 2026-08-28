@@ -27,6 +27,28 @@ Stack: **API + Postgres + MinIO + coturn**. TLS fica no **nginx do host** (porta
 
 Passo a passo completo: [publishing.md](./publishing.md).
 
+## CD da API (GitHub Actions)
+
+Workflow: `.github/workflows/deploy-api.yml`
+
+- Dispara após o **CI** passar na `main` (só se mudou API/shared/docker/lockfile)
+- Ou manual: **Actions → Deploy API → Run workflow**
+- Na VPS: `git pull` + `docker compose ... up -d --build api` + health check
+
+Secrets no GitHub (**Settings → Secrets and variables → Actions**):
+
+| Secret | Exemplo |
+|--------|---------|
+| `SSH_HOST` | `147.93.186.159` |
+| `SSH_USER` | `tpescolar` |
+| `SSH_PRIVATE_KEY` | conteúdo da chave privada SSH |
+| `DEPLOY_PATH` | `/home/tpescolar/clone-discord` |
+| `SSH_PORT` | `22` (opcional) |
+
+Na VPS, o projeto deve ser um clone git com `origin` apontando para o GitHub. O `.env.production` **não** é alterado pelo deploy.
+
+Opcional: em **Settings → Environments**, crie `production` para exigir aprovação antes do deploy.
+
 ## Empacote
 
 - Linux: AppImage + `.deb` via `pnpm --filter @concord/desktop pack:linux`
