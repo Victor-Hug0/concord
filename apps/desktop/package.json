@@ -63,7 +63,11 @@
         "AppImage",
         "deb"
       ],
-      "category": "Network"
+      "category": "Network",
+      "executableName": "concord"
+    },
+    "deb": {
+      "packageName": "concord-desktop"
     },
     "win": {
       "target": [
