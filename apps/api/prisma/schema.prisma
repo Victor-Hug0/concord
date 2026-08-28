@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  member
+}
+
+enum ChannelType {
+  text
+  voice
+}
+
+model User {
+  id          String    @id @default(uuid())
+  googleSub   String    @unique
+  email       String    @unique
+  displayName String
+  role        UserRole  @default(member)
+  avatarUrl   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sessions     Session[]
+  invitesCreated Invite[] @relation("InviteCreator")
+  messages     Message[]
+  attachments  Attachment[]
+  reactions    Reaction[]
+  channelsCreated Channel[] @relation("ChannelCreator")
+}
+
+model Session {
+  id               String    @id @default(uuid())
+  userId           String
+  refreshTokenHash String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  userAgent        String?
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+}
+
+model Invite {
+  id        String    @id @default(uuid())
+  code      String    @unique
+  createdBy String
+  expiresAt DateTime
+  maxUses   Int       @default(1)
+  uses      Int       @default(0)
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  creator   User      @relation("InviteCreator", fields: [createdBy], references: [id])
+
+  @@index([code])
+}
+
+model Server {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  channels  Channel[]
+}
+
+model Channel {
+  id        String      @id @default(uuid())
+  serverId  String
+  name      String
+  type      ChannelType
+  position  Int         @default(0)
+  createdBy String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  server    Server      @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  creator   User?       @relation("ChannelCreator", fields: [createdBy], references: [id])
+  messages  Message[]
+
+  @@unique([serverId, name])
+  @@index([serverId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  channelId      String
+  authorId       String
+  body           String
+  parentId       String?
+  mentionUserIds String[]     @default([])
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  channel        Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author         User         @relation(fields: [authorId], references: [id])
+  parent         Message?     @relation("MessageThread", fields: [parentId], references: [id])
+  replies        Message[]    @relation("MessageThread")
+  attachments    Attachment[]
+  reactions      Reaction[]
+
+  @@index([channelId, createdAt])
+  @@index([parentId])
+}
+
+model Attachment {
+  id         String   @id @default(uuid())
+  messageId  String
+  objectKey  String
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  authorId   String
+  createdAt  DateTime @default(now())
+  message    Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  author     User     @relation(fields: [authorId], references: [id])
+
+  @@index([messageId])
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}

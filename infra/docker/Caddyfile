@@ -1,0 +1,16 @@
+# Caddyfile de desenvolvimento / referência.
+# Produção: use Caddyfile.prod com docker-compose.prod.yml (variável DOMAIN).
+
+concord.example.com {
+  encode gzip
+
+  handle /socket.io* {
+    reverse_proxy api:3000
+  }
+
+  handle /ws* {
+    reverse_proxy api:3000
+  }
+
+  reverse_proxy api:3000
+}

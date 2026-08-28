@@ -1,0 +1,47 @@
+name: Release desktop
+
+on:
+  push:
+    tags:
+      - 'desktop-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: release:win
+          - os: ubuntu-latest
+            script: release:linux
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable corepack / pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.0 --activate
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared
+        run: pnpm --filter @concord/shared build
+
+      - name: Release desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Opcional: feed genérico no client (não afeta o publish do builder)
+          # UPDATE_FEED_URL: https://updates.example.com/concord
+        run: pnpm --filter @concord/desktop ${{ matrix.script }}

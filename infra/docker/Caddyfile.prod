@@ -1,0 +1,30 @@
+# Produção — TLS automático (Let's Encrypt) via Caddy.
+# DOMAIN vem do ambiente do container (docker-compose.prod.yml).
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	request_body {
+		max_size 512MB
+	}
+
+	handle /socket.io* {
+		reverse_proxy api:3000
+	}
+
+	handle /ws* {
+		reverse_proxy api:3000
+	}
+
+	reverse_proxy api:3000
+}
+
+files.{$DOMAIN} {
+	encode gzip zstd
+
+	request_body {
+		max_size 512MB
+	}
+
+	reverse_proxy minio:9000
+}

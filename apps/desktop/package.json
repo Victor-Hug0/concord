@@ -1,0 +1,70 @@
+{
+  "name": "@concord/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev:web": "vite",
+    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "dev:win": "node scripts/dev-win-electron.js",
+    "dev:win:sh": "bash scripts/dev-win-electron.sh",
+    "build": "tsc -p tsconfig.json --noEmit && vite build && node scripts/copy-electron.js",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "pack": "pnpm build && electron-builder --linux AppImage deb --win nsis --publish never",
+    "pack:linux": "pnpm build && electron-builder --linux AppImage deb --publish never",
+    "pack:win": "pnpm build && electron-builder --win nsis --publish never",
+    "release": "pnpm build && electron-builder --linux AppImage deb --win nsis --publish always -c.publish.provider=github -c.publish.releaseType=release",
+    "release:win": "pnpm build && electron-builder --win nsis --publish always -c.publish.provider=github -c.publish.releaseType=release",
+    "release:linux": "pnpm build && electron-builder --linux AppImage deb --publish always -c.publish.provider=github -c.publish.releaseType=release"
+  },
+  "dependencies": {
+    "@concord/shared": "workspace:*",
+    "electron-updater": "^6.3.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@types/semver": "^7.8.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.6",
+    "vitest": "^2.1.8",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "app.concord.desktop",
+    "productName": "Concord",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "publish": null,
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "differentialPackage": true
+    }
+  }
+}

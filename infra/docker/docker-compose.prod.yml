@@ -1,0 +1,139 @@
+# Produção — API + Postgres + MinIO + coturn
+# TLS/proxy: nginx (ou Caddy) no host — portas 80/443 já em uso na VPS.
+#
+#   cp infra/docker/.env.production.example infra/docker/.env.production
+#   docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.production up -d --build
+#   # configure nginx: ver infra/docker/nginx-concord.conf.example
+#
+# Seed (primeira vez): RUN_SEED=1, suba, depois volte a 0.
+
+name: concord-prod
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      API_PORT: "3000"
+      API_URL: https://${DOMAIN}
+      GOOGLE_CALLBACK_URL: https://${DOMAIN}/auth/google/callback
+      DATABASE_URL: postgresql://${POSTGRES_USER:-concord}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-concord}?schema=public
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-concord}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-concord-attachments}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_PUBLIC_URL: https://files.${DOMAIN}
+      TURN_SECRET: ${TURN_SECRET}
+      TURN_URLS: turn:${DOMAIN}:3478
+      STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    networks:
+      - concord
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-concord}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-concord}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-concord} -d ${POSTGRES_DB:-concord}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - concord
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9000:9000"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-concord}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    networks:
+      - concord
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      set -e;
+      sleep 3;
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-concord} $${MINIO_ROOT_PASSWORD};
+      mc mb --ignore-existing local/$${S3_BUCKET:-concord-attachments};
+      exit 0;
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-concord}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-concord-attachments}
+    networks:
+      - concord
+    restart: "no"
+
+  # Host network: ICE/TURN precisa de UDP real na VPS (Linux).
+  coturn:
+    image: coturn/coturn:latest
+    network_mode: host
+    restart: unless-stopped
+    command:
+      - "-n"
+      - "--log-file=stdout"
+      - "--listening-port=3478"
+      - "--fingerprint"
+      - "--lt-cred-mech"
+      - "--use-auth-secret"
+      - "--static-auth-secret=${TURN_SECRET:?set TURN_SECRET}"
+      - "--realm=${DOMAIN:?set DOMAIN}"
+      - "--no-cli"
+      - "--no-tls"
+      - "--no-dtls"
+      - "--min-port=49152"
+      - "--max-port=49200"
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  concord:
+    driver: bridge

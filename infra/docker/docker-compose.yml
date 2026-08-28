@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: concord
+      POSTGRES_PASSWORD: concord
+      POSTGRES_DB: concord
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U concord -d concord"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: concord
+      MINIO_ROOT_PASSWORD: concordsecret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set local http://minio:9000 concord concordsecret;
+      mc mb --ignore-existing local/concord-attachments;
+      exit 0;
+      "
+
+  coturn:
+    image: coturn/coturn:latest
+    network_mode: host
+    command:
+      - "-n"
+      - "--log-file=stdout"
+      - "--listening-port=3478"
+      - "--fingerprint"
+      - "--lt-cred-mech"
+      - "--use-auth-secret"
+      - "--static-auth-secret=concord-turn-secret"
+      - "--realm=concord.local"
+      - "--no-cli"
+      - "--no-tls"
+      - "--no-dtls"
+    profiles:
+      - turn
+
+volumes:
+  postgres_data:
+  minio_data:

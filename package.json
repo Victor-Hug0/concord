@@ -1,0 +1,26 @@
+{
+  "name": "concord",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Concord — comunicação em tempo real para um servidor fixo",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter @concord/api --filter @concord/desktop dev",
+    "dev:api": "pnpm --filter @concord/api dev",
+    "dev:desktop": "pnpm --filter @concord/desktop dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "test": "pnpm -r test",
+    "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "docker:prod:up": "docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.production up -d --build",
+    "docker:prod:down": "docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.production down",
+    "docker:prod:logs": "docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.production logs -f",
+    "setup": "bash scripts/setup-from-docker.sh"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}

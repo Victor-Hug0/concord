@@ -1,0 +1,37 @@
+# deps & build artifacts
+node_modules
+**/node_modules
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+
+# VCS / IDE
+.git
+.github
+.cache
+.idea
+.vscode
+**/.DS_Store
+
+# local data
+.data
+.docker-data
+.docker-run
+coverage
+*.log
+
+# not needed for API image
+apps/desktop
+tools
+docs
+scripts
+README.md
+
+# secrets — never bake into image
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+infra/docker/.env.production
