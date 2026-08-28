@@ -67,7 +67,8 @@
       "executableName": "concord"
     },
     "deb": {
-      "packageName": "concord-desktop"
+      "packageName": "concord-desktop",
+      "artifactName": "concord-desktop_${version}_${arch}.${ext}"
     },
     "win": {
       "target": [
