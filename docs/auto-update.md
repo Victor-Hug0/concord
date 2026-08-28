@@ -55,9 +55,11 @@ No **publish** você ainda pode usar GitHub e espelhar os arquivos para o host g
 
 Workflow: `.github/workflows/release-desktop.yml`
 
-- Dispara em tags `desktop-v*` (ex.: `desktop-v0.2.0`)
-- Build Windows + Linux AppImage
-- Publica Release com `--publish always`
+- **Automático:** após o **CI** passar na `main`, se mudou `apps/desktop/` ou `packages/shared/`
+- Versão gerada no CI: `0.1.<run>` (ex.: `0.1.42`) — sempre sobe para o auto-update funcionar
+- Build **Windows** (NSIS) + **Linux** (AppImage + `.deb`) em paralelo
+- Publica na **GitHub Release** com `latest.yml` / `latest-linux.yml`
+- **Manual:** tag `desktop-v1.2.3` ou Actions → Release desktop → Run workflow
 
 Ajuste `permissions` / secrets (`GH_TOKEN` já vem no Actions).
 
