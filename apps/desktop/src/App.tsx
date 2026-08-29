@@ -104,6 +104,13 @@ export function App() {
     [server, channelId],
   );
 
+  const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
+
+  const offlineUsers = useMemo(() => {
+    const onlineIds = new Set(presence.map((p) => p.userId));
+    return users.filter((u) => !onlineIds.has(u.id));
+  }, [users, presence]);
+
   useEffect(() => {
     if (!server || !channelId) return;
     const current = server.channels.find((c) => c.id === channelId);
@@ -982,20 +989,26 @@ export function App() {
 
       <aside className="member-panel">
         <div className="channel-group-title">Online — {presence.length}</div>
-        {presence.map((p) => (
-          <div key={p.userId} className="member-row">
-            <div className="member-avatar">
-              {initials(p.displayName)}
-              <span className="status-dot ok" />
+        {presence.map((p) => {
+          const user = userById.get(p.userId);
+          return (
+            <div
+              key={p.userId}
+              className={`member-row ${user?.role === 'admin' ? 'admin' : ''}`}
+            >
+              <div className="member-avatar">
+                {initials(p.displayName)}
+                <span className="status-dot ok" />
+              </div>
+              <span className="member-name">
+                {p.displayName}
+                {p.voiceChannelId ? ' · voz' : ''}
+              </span>
             </div>
-            <span className="member-name">
-              {p.displayName}
-              {p.voiceChannelId ? ' · voz' : ''}
-            </span>
-          </div>
-        ))}
-        <div className="channel-group-title">Membros — {users.length}</div>
-        {users.map((u) => (
+          );
+        })}
+        <div className="channel-group-title">Membros — {offlineUsers.length}</div>
+        {offlineUsers.map((u) => (
           <div key={u.id} className={`member-row ${u.role === 'admin' ? 'admin' : ''}`}>
             <div className="member-avatar">{initials(u.displayName)}</div>
             <span className="member-name">{u.displayName}</span>
