@@ -36,6 +36,8 @@ services:
       TURN_SECRET: ${TURN_SECRET}
       TURN_URLS: turn:${DOMAIN}:3478
       STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302}
+      GITHUB_REPO: ${GITHUB_REPO:-Victor-Hug0/concord}
+      GITHUB_RELEASES_TOKEN: ${GITHUB_RELEASES_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy

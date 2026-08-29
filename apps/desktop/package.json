@@ -51,8 +51,10 @@
   "build": {
     "appId": "app.concord.desktop",
     "productName": "Concord",
+    "afterPack": "./scripts/after-pack.js",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",

@@ -14,6 +14,7 @@ import { InvitesModule } from './invites/invites.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { HealthController } from './health.controller';
 import { TurnModule } from './turn/turn.module';
+import { UpdatesModule } from './updates/updates.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 
 @Module({
@@ -39,6 +40,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
     InvitesModule,
     RealtimeModule,
     TurnModule,
+    UpdatesModule,
   ],
   controllers: [HealthController],
   providers: [

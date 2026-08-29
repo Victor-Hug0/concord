@@ -1,17 +1,20 @@
 /**
  * Auto-update do Concord (só em builds empacotadas).
  *
- * Feed:
- * - UPDATE_FEED_URL → provider generic (S3, R2, static host, etc.)
- * - senão → GitHub Releases (provider github), se repository estiver configurado
+ * Feed embutido em resources/app-update.yml (scripts/after-pack.js):
+ *   https://concord.televei.dev/updates  → API proxy das GitHub Releases
  */
-const { ipcMain, app } = require('electron');
+const { app, ipcMain } = require('electron');
 
 /** @type {import('electron').BrowserWindow | null} */
 let targetWindow = null;
 let started = false;
+let checkTimer = null;
 /** @type {import('electron-updater').AppUpdater | null} */
 let autoUpdaterRef = null;
+
+const CHECK_INTERVAL_MS = Number(process.env.UPDATE_CHECK_INTERVAL_MS || 30 * 60_000);
+const INITIAL_DELAY_MS = Number(process.env.UPDATE_CHECK_DELAY_MS || 8_000);
 
 function getAutoUpdater() {
   if (!autoUpdaterRef) {
@@ -26,12 +29,36 @@ function send(type, payload = {}) {
   }
 }
 
-function resolveFeed() {
-  const generic = process.env.UPDATE_FEED_URL || process.env.CONCORD_UPDATE_URL;
-  if (generic) {
-    return { provider: 'generic', url: generic.replace(/\/$/, '') };
+function isBenignUpdateError(message) {
+  const m = String(message || '').toLowerCase();
+  return (
+    m.includes('404') ||
+    m.includes('403') ||
+    m.includes('releases.atom') ||
+    m.includes('authentication token') ||
+    m.includes('net::') ||
+    m.includes('enotfound')
+  );
+}
+
+function scheduleChecks() {
+  if (checkTimer) clearInterval(checkTimer);
+  checkTimer = setInterval(() => {
+    void runUpdateCheck(false);
+  }, CHECK_INTERVAL_MS);
+}
+
+async function runUpdateCheck(notifyErrors) {
+  if (!app.isPackaged) return;
+  try {
+    await getAutoUpdater().checkForUpdates();
+  } catch (err) {
+    const message = err?.message || String(err);
+    console.warn('[updater] check failed', message);
+    if (notifyErrors && !isBenignUpdateError(message)) {
+      send('error', { message: 'Não foi possível verificar atualizações.' });
+    }
   }
-  return null;
 }
 
 function setupAutoUpdater(win) {
@@ -44,14 +71,6 @@ function setupAutoUpdater(win) {
   started = true;
 
   const autoUpdater = getAutoUpdater();
-  const feed = resolveFeed();
-  if (feed) {
-    autoUpdater.setFeedURL(feed);
-    console.log('[updater] feed generic:', feed.url);
-  } else {
-    console.log('[updater] feed: GitHub Releases (package.json / electron-builder publish)');
-  }
-
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.logger = console;
@@ -63,8 +82,8 @@ function setupAutoUpdater(win) {
       releaseNotes: info.releaseNotes ?? null,
     });
   });
-  autoUpdater.on('update-not-available', (info) => {
-    send('not-available', { version: info.version });
+  autoUpdater.on('update-not-available', () => {
+    send('not-available');
   });
   autoUpdater.on('download-progress', (p) => {
     send('progress', {
@@ -81,17 +100,17 @@ function setupAutoUpdater(win) {
     });
   });
   autoUpdater.on('error', (err) => {
-    console.error('[updater]', err);
-    send('error', { message: err?.message || String(err) });
+    const message = err?.message || String(err);
+    console.error('[updater]', message);
+    if (!isBenignUpdateError(message)) {
+      send('error', { message: 'Não foi possível baixar a atualização.' });
+    }
   });
 
-  const delayMs = Number(process.env.UPDATE_CHECK_DELAY_MS || 8_000);
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch((err) => {
-      console.warn('[updater] check failed', err?.message || err);
-      send('error', { message: err?.message || String(err) });
-    });
-  }, delayMs);
+    void runUpdateCheck(false);
+    scheduleChecks();
+  }, INITIAL_DELAY_MS);
 }
 
 function registerUpdaterIpc() {

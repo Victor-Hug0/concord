@@ -19,44 +19,28 @@ export function UpdateBanner() {
       if (v?.version) setAppVersion(v.version);
     });
     return window.concord.onUpdaterEvent((payload) => {
-      if (payload.type === 'idle' || payload.type === 'not-available' || payload.type === 'checking') {
+      if (payload.type === 'idle' || payload.type === 'checking' || payload.type === 'not-available') {
         if (payload.type === 'not-available') setEvent(null);
+        return;
+      }
+      if (payload.type === 'error') {
+        console.warn('[updater]', payload.message);
         return;
       }
       setEvent(payload);
     });
   }, []);
 
-  if (!event || event.type === 'error') {
-    if (event?.type === 'error') {
-      return (
-        <div className="update-banner error" role="status">
-          Falha ao verificar atualização
-          {event.message ? `: ${event.message}` : ''}
-          <button
-            type="button"
-            className="btn secondary"
-            onClick={() => {
-              setEvent(null);
-              void window.concord?.checkForUpdates?.();
-            }}
-          >
-            Tentar de novo
-          </button>
-        </div>
-      );
-    }
-    return null;
-  }
+  if (!event) return null;
 
   if (event.type === 'available' || event.type === 'progress') {
     const pct = event.type === 'progress' ? Math.round(event.percent ?? 0) : null;
     return (
       <div className="update-banner" role="status">
         <span>
-          Atualização {event.version ? `v${event.version}` : ''} disponível
+          Nova versão {event.version ? `v${event.version}` : ''} encontrada
           {pct != null ? ` · baixando ${pct}%` : ' · baixando…'}
-          {appVersion ? ` (atual v${appVersion})` : ''}
+          {appVersion ? ` (você está na v${appVersion})` : ''}
         </span>
       </div>
     );
@@ -66,7 +50,8 @@ export function UpdateBanner() {
     return (
       <div className="update-banner ready" role="status">
         <span>
-          Concord {event.version ? `v${event.version}` : ''} pronto para instalar
+          Atualização {event.version ? `v${event.version}` : ''} pronta
+          {appVersion ? ` · v${appVersion} → v${event.version}` : ''}
         </span>
         <button
           type="button"
