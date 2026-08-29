@@ -3,70 +3,82 @@ import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
-const SEED_ADMIN_PASSWORD = 'concord-admin-change-me';
+
+const SEED_ADMIN_EMAIL = 'victorhugomourabarreto1@gmail.com';
+const SEED_ADMIN_NAME = 'VictorCRF';
+const SEED_ADMIN_PASSWORD = 'concord123';
+
+async function resetDatabase() {
+  await prisma.$executeRaw`
+    TRUNCATE TABLE
+      "Reaction",
+      "Attachment",
+      "Message",
+      "Channel",
+      "Invite",
+      "Session",
+      "EmailVerification",
+      "User",
+      "Server"
+    RESTART IDENTITY CASCADE
+  `;
+}
 
 async function main() {
-  let server = await prisma.server.findFirst({ where: { name: 'Concord' } });
-  if (!server) {
-    server = await prisma.server.create({ data: { name: 'Concord' } });
-  }
-
-  const channelCount = await prisma.channel.count({ where: { serverId: server.id } });
-  if (channelCount === 0) {
-    await prisma.channel.createMany({
-      data: [
-        { serverId: server.id, name: 'geral', type: 'text', position: 0 },
-        { serverId: server.id, name: 'aleatorio', type: 'text', position: 1 },
-        { serverId: server.id, name: 'Lobby', type: 'voice', position: 2 },
-        { serverId: server.id, name: 'Sala 1', type: 'voice', position: 3 },
-      ],
-    });
-  }
+  await resetDatabase();
 
   const passwordHash = await bcrypt.hash(SEED_ADMIN_PASSWORD, 10);
-  let admin = await prisma.user.findUnique({ where: { email: 'admin@concord.local' } });
-  if (!admin) {
-    admin = await prisma.user.create({
-      data: {
-        email: 'admin@concord.local',
-        displayName: 'Admin',
-        passwordHash,
-        role: 'admin',
-      },
-    });
-  } else {
-    admin = await prisma.user.update({
-      where: { id: admin.id },
-      data: { passwordHash },
-    });
-  }
-
-  let invite = await prisma.invite.findFirst({
-    where: {
-      revokedAt: null,
-      expiresAt: { gt: new Date() },
-      createdBy: admin.id,
+  const admin = await prisma.user.create({
+    data: {
+      email: SEED_ADMIN_EMAIL,
+      displayName: SEED_ADMIN_NAME,
+      passwordHash,
+      role: 'admin',
     },
   });
 
-  if (!invite) {
-    invite = await prisma.invite.create({
-      data: {
-        code: randomBytes(6).toString('hex'),
+  const server = await prisma.server.create({
+    data: { name: 'Concord' },
+  });
+
+  await prisma.channel.createMany({
+    data: [
+      {
+        serverId: server.id,
+        name: 'geral',
+        type: 'text',
+        position: 0,
         createdBy: admin.id,
-        maxUses: 50,
-        expiresAt: new Date(Date.now() + 30 * 86_400_000),
       },
-    });
-  }
+      {
+        serverId: server.id,
+        name: 'voz',
+        type: 'voice',
+        position: 1,
+        createdBy: admin.id,
+      },
+    ],
+  });
+
+  const invite = await prisma.invite.create({
+    data: {
+      code: randomBytes(6).toString('hex'),
+      createdBy: admin.id,
+      maxUses: 50,
+      expiresAt: new Date(Date.now() + 30 * 86_400_000),
+    },
+  });
 
   console.log(
     JSON.stringify(
       {
+        reset: true,
         adminEmail: admin.email,
+        adminDisplayName: admin.displayName,
         adminPassword: SEED_ADMIN_PASSWORD,
         inviteCode: invite.code,
         serverId: server.id,
+        channels: ['geral (texto)', 'voz (voz)'],
       },
       null,
       2,

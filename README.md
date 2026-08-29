@@ -71,7 +71,7 @@ pnpm --filter @concord/api exec tsx prisma/seed.ts
 
 ### Seed e código de convite
 
-O seed cria o admin `admin@concord.local` (senha `concord-admin-change-me`) e imprime JSON com o **`inviteCode`**. Guarde esse código para cadastrar novos usuários.
+O seed **apaga todos os dados** e recria: admin **VictorCRF** (`victorhugomourabarreto1@gmail.com` / `concord123`), servidor **Concord**, canais `#geral` (texto) e `voz` (voz), mais um `inviteCode`. Só rode quando quiser zerar o banco (`RUN_SEED=1` na VPS ou `pnpm --filter @concord/api exec tsx prisma/seed.ts`).
 
 ## Desenvolvimento
 
@@ -93,7 +93,7 @@ Exemplo (admin do seed):
 ```bash
 curl -s -X POST http://localhost:3000/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@concord.local","password":"concord-admin-change-me"}'
+  -d '{"email":"victorhugomourabarreto1@gmail.com","password":"concord123"}'
 ```
 
 ## Testes
