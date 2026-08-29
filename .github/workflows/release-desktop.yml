@@ -1,4 +1,4 @@
-# Release desktop — Windows (.exe) + Linux (AppImage/.deb) na GitHub Release.
+# Release desktop — Windows (.exe) + Linux (AppImage/.deb/Flatpak) na GitHub Release.
 #
 # Dispara após CI passar na main, tag desktop-v*, ou manual (Run workflow).
 # Versão auto: MAJOR.MINOR do package.json + run number (ex.: 0.1.42).
@@ -97,6 +97,17 @@ jobs:
 
       - name: Build shared
         run: pnpm --filter @concord/shared build
+
+      - name: Install Flatpak tooling
+        if: matrix.script == 'release:linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder elfutils
+          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y --noninteractive flathub \
+            org.freedesktop.Platform//24.08 \
+            org.freedesktop.Sdk//24.08 \
+            org.electronjs.Electron2.BaseApp//24.08
 
       - name: Release desktop
         env:

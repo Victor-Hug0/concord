@@ -21,12 +21,12 @@
     "build": "tsc -p tsconfig.json --noEmit && vite build && node scripts/copy-electron.js",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
-    "pack": "pnpm build && electron-builder --linux AppImage deb --win nsis --publish never",
-    "pack:linux": "pnpm build && electron-builder --linux AppImage deb --publish never",
+    "pack": "pnpm build && electron-builder --linux AppImage deb flatpak --win nsis --publish never",
+    "pack:linux": "pnpm build && electron-builder --linux AppImage deb flatpak --publish never",
     "pack:win": "pnpm build && electron-builder --win nsis --publish never",
-    "release": "pnpm build && electron-builder --linux AppImage deb --win nsis --publish always -c.publish.provider=github -c.publish.releaseType=release",
+    "release": "pnpm build && electron-builder --linux AppImage deb flatpak --win nsis --publish always -c.publish.provider=github -c.publish.releaseType=release",
     "release:win": "pnpm build && electron-builder --win nsis --publish always -c.publish.provider=github -c.publish.releaseType=release",
-    "release:linux": "pnpm build && electron-builder --linux AppImage deb --publish always -c.publish.provider=github -c.publish.releaseType=release"
+    "release:linux": "pnpm build && electron-builder --linux AppImage deb flatpak --publish always -c.publish.provider=github -c.publish.releaseType=release"
   },
   "dependencies": {
     "@concord/shared": "workspace:*",
@@ -61,7 +61,8 @@
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "flatpak"
       ],
       "category": "Network",
       "executableName": "concord"
@@ -69,6 +70,24 @@
     "deb": {
       "packageName": "concord-desktop",
       "artifactName": "concord-desktop_${version}_${arch}.${ext}"
+    },
+    "flatpak": {
+      "runtimeVersion": "24.08",
+      "baseVersion": "24.08",
+      "artifactName": "concord-${version}-${arch}.${ext}",
+      "finishArgs": [
+        "--socket=wayland",
+        "--socket=x11",
+        "--share=ipc",
+        "--device=dri",
+        "--socket=pulseaudio",
+        "--socket=pipewire",
+        "--filesystem=home",
+        "--share=network",
+        "--talk-name=org.freedesktop.Notifications",
+        "--talk-name=org.freedesktop.portal.Desktop",
+        "--talk-name=org.freedesktop.portal.ScreenCast"
+      ]
     },
     "win": {
       "target": [
