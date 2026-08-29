@@ -1,7 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
+const SEED_ADMIN_PASSWORD = 'concord-admin-change-me';
 
 async function main() {
   let server = await prisma.server.findFirst({ where: { name: 'Concord' } });
@@ -21,15 +23,21 @@ async function main() {
     });
   }
 
+  const passwordHash = await bcrypt.hash(SEED_ADMIN_PASSWORD, 10);
   let admin = await prisma.user.findUnique({ where: { email: 'admin@concord.local' } });
   if (!admin) {
     admin = await prisma.user.create({
       data: {
-        googleSub: 'seed-admin',
         email: 'admin@concord.local',
         displayName: 'Admin',
+        passwordHash,
         role: 'admin',
       },
+    });
+  } else {
+    admin = await prisma.user.update({
+      where: { id: admin.id },
+      data: { passwordHash },
     });
   }
 
@@ -56,6 +64,7 @@ async function main() {
     JSON.stringify(
       {
         adminEmail: admin.email,
+        adminPassword: SEED_ADMIN_PASSWORD,
         inviteCode: invite.code,
         serverId: server.id,
       },

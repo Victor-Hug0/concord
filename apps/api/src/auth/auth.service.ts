@@ -1,20 +1,15 @@
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomInt } from 'crypto';
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-
-type GoogleProfile = {
-  googleSub: string;
-  email: string;
-  displayName: string;
-  avatarUrl?: string;
-  inviteCode: string;
-};
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -22,53 +17,120 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    private mail: MailService,
   ) {}
 
   private hashToken(token: string) {
     return createHash('sha256').update(token).digest('hex');
   }
 
-  async loginWithGoogle(profile: GoogleProfile) {
-    if (!profile.email || !profile.googleSub) {
-      throw new BadRequestException('Perfil Google incompleto');
+  private verificationTtlMs(): number {
+    const minutes = Number(this.config.get('EMAIL_VERIFICATION_TTL_MINUTES', '15'));
+    return minutes * 60_000;
+  }
+
+  async sendVerificationEmail(email: string) {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized) {
+      throw new BadRequestException('E-mail obrigatório');
     }
 
-    let user = await this.prisma.user.findUnique({
-      where: { googleSub: profile.googleSub },
+    const existing = await this.prisma.user.findUnique({ where: { email: normalized } });
+    if (existing) {
+      throw new ConflictException('Este e-mail já está cadastrado');
+    }
+
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const expiresAt = new Date(Date.now() + this.verificationTtlMs());
+
+    await this.prisma.emailVerification.updateMany({
+      where: { email: normalized, usedAt: null },
+      data: { usedAt: new Date() },
     });
 
-    if (!user) {
-      const existingByEmail = await this.prisma.user.findUnique({
-        where: { email: profile.email },
-      });
-      if (existingByEmail) {
-        user = await this.prisma.user.update({
-          where: { id: existingByEmail.id },
-          data: {
-            googleSub: profile.googleSub,
-            displayName: profile.displayName,
-            avatarUrl: profile.avatarUrl,
-          },
-        });
-      } else {
-        await this.consumeInvite(profile.inviteCode);
-        const bootstrap = this.config.get<string>('BOOTSTRAP_ADMIN_EMAIL');
-        const isFirst = (await this.prisma.user.count()) === 0;
-        const role =
-          isFirst || (bootstrap && bootstrap.toLowerCase() === profile.email.toLowerCase())
-            ? 'admin'
-            : 'member';
+    await this.prisma.emailVerification.create({
+      data: {
+        email: normalized,
+        tokenHash: this.hashToken(code),
+        expiresAt,
+      },
+    });
 
-        user = await this.prisma.user.create({
-          data: {
-            googleSub: profile.googleSub,
-            email: profile.email,
-            displayName: profile.displayName,
-            avatarUrl: profile.avatarUrl,
-            role,
-          },
-        });
-      }
+    await this.mail.sendVerificationCode(normalized, code);
+    return { ok: true, expiresAt };
+  }
+
+  private async verifyEmailToken(email: string, token: string) {
+    const normalized = email.trim().toLowerCase();
+    const record = await this.prisma.emailVerification.findFirst({
+      where: {
+        email: normalized,
+        tokenHash: this.hashToken(token.trim()),
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!record) {
+      throw new BadRequestException('Código de verificação inválido ou expirado');
+    }
+
+    await this.prisma.emailVerification.update({
+      where: { id: record.id },
+      data: { usedAt: new Date() },
+    });
+  }
+
+  async register(
+    inviteCode: string,
+    email: string,
+    password: string,
+    displayName: string,
+    verificationToken: string,
+  ) {
+    const normalized = email.trim().toLowerCase();
+    const name = displayName.trim();
+    if (!name) {
+      throw new BadRequestException('Usuário obrigatório');
+    }
+    if (password.length < 8) {
+      throw new BadRequestException('Senha deve ter pelo menos 8 caracteres');
+    }
+
+    const existing = await this.prisma.user.findUnique({ where: { email: normalized } });
+    if (existing) {
+      throw new ConflictException('Este e-mail já está cadastrado');
+    }
+
+    await this.verifyEmailToken(normalized, verificationToken);
+    await this.consumeInvite(inviteCode);
+
+    const isFirst = (await this.prisma.user.count()) === 0;
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await this.prisma.user.create({
+      data: {
+        email: normalized,
+        displayName: name,
+        passwordHash,
+        role: isFirst ? 'admin' : 'member',
+      },
+    });
+
+    return this.issueTokens(user.id, user.email);
+  }
+
+  async login(email: string, password: string) {
+    const normalized = email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email: normalized } });
+    if (!user) {
+      throw new UnauthorizedException('E-mail ou senha inválidos');
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      throw new UnauthorizedException('E-mail ou senha inválidos');
     }
 
     return this.issueTokens(user.id, user.email);
@@ -157,26 +219,5 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
     return { ok: true };
-  }
-
-  /** Dev-only login when Google OAuth is not configured */
-  async devLogin(inviteCode: string, email: string, displayName: string) {
-    if (this.config.get('NODE_ENV') === 'production') {
-      throw new BadRequestException('Dev login desabilitado em produção');
-    }
-    let user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      await this.consumeInvite(inviteCode);
-      const isFirst = (await this.prisma.user.count()) === 0;
-      user = await this.prisma.user.create({
-        data: {
-          googleSub: `dev-${email}`,
-          email,
-          displayName,
-          role: isFirst ? 'admin' : 'member',
-        },
-      });
-    }
-    return this.issueTokens(user.id, user.email);
   }
 }

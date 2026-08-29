@@ -216,26 +216,17 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.setAsDefaultProtocolClient('concord');
-
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', (_event, argv) => {
-    const url = argv.find((a) => a.startsWith('concord://'));
-    if (url && mainWindow) {
-      mainWindow.webContents.send('oauth-callback', url);
+  app.on('second-instance', () => {
+    if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
   });
 }
-
-app.on('open-url', (event, url) => {
-  event.preventDefault();
-  if (mainWindow) mainWindow.webContents.send('oauth-callback', url);
-});
 
 ipcMain.handle('get-capture-env', () => ({
   platform: captureEnv.platform,

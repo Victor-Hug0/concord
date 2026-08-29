@@ -161,9 +161,7 @@ jobs:
           fi
 
           test -f "${ENV_FILE}" || { echo "Falta ${ENV_FILE}"; exit 1; }
-          ls -la apps/api/src/auth/google-auth.guard.ts 2>/dev/null \
-            && echo "google-auth.guard.ts presente" \
-            || echo "WARN: google-auth.guard.ts ausente"
+          test -f apps/api/src/auth/auth.controller.ts || { echo "auth.controller.ts ausente"; exit 1; }
 
       - name: Build e reiniciar API
         env:

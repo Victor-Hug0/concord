@@ -14,9 +14,4 @@ contextBridge.exposeInMainWorld('concord', {
     ipcRenderer.on('updater:event', listener);
     return () => ipcRenderer.removeListener('updater:event', listener);
   },
-  onOAuthCallback: (cb) => {
-    const listener = (_event, url) => cb(url);
-    ipcRenderer.on('oauth-callback', listener);
-    return () => ipcRenderer.removeListener('oauth-callback', listener);
-  },
 });

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>app.concord.desktop</id>
+  <name>Concord</name>
+  <summary>Comunicação em tempo real</summary>
+  <description>
+    <p>Concord — comunicação em tempo real com texto, voz e compartilhamento de tela.</p>
+  </description>
+  <launchable type="desktop-id">app.concord.desktop.desktop</launchable>
+  <categories>
+    <category>Network</category>
+    <category>Chat</category>
+  </categories>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+</component>

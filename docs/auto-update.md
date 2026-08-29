@@ -50,6 +50,7 @@ No **publish** você ainda pode usar GitHub e espelhar os arquivos para o host g
 | Windows | NSIS | Sim (`latest.yml`) |
 | Linux | **AppImage** | Sim (`latest-linux.yml`) |
 | Linux | `.deb` | Instalação manual (apt); AppImage é o canal de update |
+| Linux | **Flatpak** | Instalação manual; sem auto-update |
 
 ## CI (GitHub Actions)
 
@@ -57,7 +58,7 @@ Workflow: `.github/workflows/release-desktop.yml`
 
 - **Automático:** após o **CI** passar na `main` (todo merge, sem filtro de paths)
 - Versão gerada no CI: `0.1.<run>` (ex.: `0.1.42`) — sempre sobe para o auto-update funcionar
-- Build **Windows** (NSIS) + **Linux** (AppImage + `.deb`) em paralelo
+- Build **Windows** (NSIS) + **Linux** (AppImage + `.deb` + Flatpak) em paralelo
 - Publica na **GitHub Release** com `latest.yml` / `latest-linux.yml`
 - **Manual:** tag `desktop-v1.2.3` ou Actions → Release desktop → Run workflow
 

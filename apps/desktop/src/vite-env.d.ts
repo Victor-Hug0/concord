@@ -44,7 +44,6 @@ declare global {
       checkForUpdates: () => Promise<{ ok: boolean; version?: string | null; message?: string; reason?: string }>;
       installUpdate: () => Promise<{ ok: boolean; reason?: string }>;
       onUpdaterEvent: (cb: (payload: UpdaterEvent) => void) => () => void;
-      onOAuthCallback: (cb: (url: string) => void) => () => void;
     };
   }
 }

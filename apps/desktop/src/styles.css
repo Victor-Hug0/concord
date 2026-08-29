@@ -705,6 +705,38 @@ select:focus {
   font-size: 0.95rem;
 }
 
+.login-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.login-tabs button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.login-tabs button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.login-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.login-hint {
+  color: var(--success, #3ba55d);
+  font-size: 0.85rem;
+}
+
 .brand {
   display: none;
 }

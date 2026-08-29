@@ -18,7 +18,7 @@ Há **duas publicações** independentes:
 | 2 | DNS + HTTPS (Caddy) | Sim |
 | 3 | Postgres + MinIO + (TURN) | Sim / TURN fortemente recomendado |
 | 4 | Deploy da API + migrate + seed | Sim |
-| 5 | Google OAuth (ou só convite/dev em testes) | Prod: sim |
+| 5 | SMTP configurado para verificação de e-mail | Prod: sim |
 | 6 | Build desktop com `VITE_API_URL` de produção | Sim |
 | 7 | Publicar release (GitHub) + auto-update | Sim para updates |
 | 8 | Assinatura de código Windows | Recomendado |
@@ -69,15 +69,13 @@ docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.
 
 Depois defina `RUN_SEED=0` e reinicie só a API. Guarde o **inviteCode**.
 
-### 1.3 Google OAuth (produção)
+### 1.3 SMTP (produção)
 
-No [Google Cloud Console](https://console.cloud.google.com/):
+Configure no `infra/docker/.env.production`:
 
-1. Crie OAuth Client (tipo Web ou Desktop conforme fluxo).
-2. Authorized redirect URI = `https://<DOMAIN>/auth/google/callback`.
-3. Preencha `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` em `.env.production` e suba de novo a API.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`
 
-Sem Google, só login de desenvolvimento funciona se `NODE_ENV` permitir — **não use dev-login em produção**.
+Sem SMTP, novos usuários não recebem o código de verificação no cadastro.
 
 ### 1.4 Health check
 

@@ -25,7 +25,6 @@ services:
       NODE_ENV: production
       API_PORT: "3000"
       API_URL: https://${DOMAIN}
-      GOOGLE_CALLBACK_URL: https://${DOMAIN}/auth/google/callback
       DATABASE_URL: postgresql://${POSTGRES_USER:-concord}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-concord}?schema=public
       STORAGE_DRIVER: s3
       S3_ENDPOINT: http://minio:9000

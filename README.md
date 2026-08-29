@@ -9,7 +9,7 @@ Aplicativo desktop multiplataforma (Windows + Linux) de comunicação em tempo r
 - **Realtime:** WebSocket (`/ws`)
 - **Arquivos:** MinIO (S3) + URLs assinadas (máx. 500 MB) — `STORAGE_DRIVER=s3`
 - **WebRTC:** P2P + coturn (STUN/TURN)
-- **Auth:** Google OAuth + código de convite (login de desenvolvimento para local)
+- **Auth:** cadastro com e-mail/senha, verificação por código e convite obrigatório
 
 ## Pré-requisitos
 
@@ -71,9 +71,7 @@ pnpm --filter @concord/api exec tsx prisma/seed.ts
 
 ### Seed e código de convite
 
-O seed cria o admin `admin@concord.local` e imprime JSON com o **`inviteCode`** (ex.: `{"adminEmail":"...","inviteCode":"…","serverId":"…"}`). Guarde esse código: usuários novos (e o login de desenvolvimento) precisam dele.
-
-Re-rodar o seed no mesmo banco pode reutilizar/atualizar dados; o `inviteCode` impresso na última execução é o que vale para o login local.
+O seed cria o admin `admin@concord.local` (senha `concord-admin-change-me`) e imprime JSON com o **`inviteCode`**. Guarde esse código para cadastrar novos usuários.
 
 ## Desenvolvimento
 
@@ -84,27 +82,19 @@ pnpm dev:desktop # Electron + Vite :5173
 
 Health: `GET http://localhost:3000/health`
 
-### Login local (sem Google)
+### Login e cadastro
 
-1. Use o `inviteCode` do seed (obrigatório no body de `POST /auth/dev-login`) e o e-mail `admin@concord.local` (já existe) **ou** outro e-mail + o mesmo convite para criar usuário.
-2. Na tela de login, preencha convite + e-mail/nome e clique em **Login de desenvolvimento**.
+1. Configure SMTP no `.env` (veja `.env.example`).
+2. Na tela do app: aba **Cadastrar** → preencha usuário, e-mail, senha, convite → **Enviar código** → informe o código recebido por e-mail → **Criar conta**.
+3. Login existente: aba **Entrar** com e-mail e senha.
 
-Exemplo:
+Exemplo (admin do seed):
 
 ```bash
-curl -s -X POST http://localhost:3000/auth/dev-login \
+curl -s -X POST http://localhost:3000/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"inviteCode":"<do seed>","email":"admin@concord.local","displayName":"Admin"}'
+  -d '{"email":"admin@concord.local","password":"concord-admin-change-me"}'
 ```
-
-### Google OAuth
-
-Configure no `.env`:
-
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback`
-- URI de redirecionamento no GCP + esquema `concord://auth/callback` no app
 
 ## Testes
 

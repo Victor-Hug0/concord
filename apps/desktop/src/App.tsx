@@ -147,20 +147,6 @@ export function App() {
   }, [tokens, bootstrap]);
 
   useEffect(() => {
-    if (!window.concord?.onOAuthCallback) return;
-    return window.concord.onOAuthCallback((url) => {
-      try {
-        const u = new URL(url);
-        const accessToken = u.searchParams.get('accessToken');
-        const refreshToken = u.searchParams.get('refreshToken');
-        if (accessToken && refreshToken) applyTokens({ accessToken, refreshToken });
-      } catch {
-        /* ignore */
-      }
-    });
-  }, []);
-
-  useEffect(() => {
     if (!tokens?.accessToken || !me) return;
     const socket = new ConcordSocket();
     socket.onStatus = setWsStatus;
@@ -1356,22 +1342,26 @@ function LoginScreen({
   error: string | null;
   setError: (e: string | null) => void;
 }) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [inviteCode, setInviteCode] = useState('');
-  const [email, setEmail] = useState('voce@exemplo.com');
-  const [displayName, setDisplayName] = useState('Amigo');
+  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [verificationToken, setVerificationToken] = useState('');
   const [busy, setBusy] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
 
-  const googleLogin = async () => {
+  const sendVerificationCode = async () => {
     setBusy(true);
     setError(null);
     try {
-      const { url } = await api<{ url: string }>('/auth/google/start', {
+      await api('/auth/verification/send', {
         method: 'POST',
-        body: JSON.stringify({ inviteCode }),
+        body: JSON.stringify({ email }),
         auth: false,
       });
-      if (window.concord) await window.concord.openExternal(url);
-      else window.open(url, '_blank');
+      setCodeSent(true);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1379,13 +1369,40 @@ function LoginScreen({
     }
   };
 
-  const devLogin = async () => {
+  const login = async () => {
     setBusy(true);
     setError(null);
     try {
-      const tokens = await api<Tokens>('/auth/dev-login', {
+      const tokens = await api<Tokens>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ inviteCode, email, displayName }),
+        body: JSON.stringify({ email, password }),
+        auth: false,
+      });
+      onLoggedIn(tokens);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const register = async () => {
+    if (password !== confirmPassword) {
+      setError('As senhas não coincidem');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const tokens = await api<Tokens>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          inviteCode,
+          email,
+          password,
+          displayName,
+          verificationToken,
+        }),
         auth: false,
       });
       onLoggedIn(tokens);
@@ -1400,25 +1417,113 @@ function LoginScreen({
     <div className="login-screen">
       <div className="login-card">
         <h1>Concord</h1>
-        <p>Entre com convite e Google. Em desenvolvimento, use o login local.</p>
-        <input
-          placeholder="Código de convite"
-          value={inviteCode}
-          onChange={(e) => setInviteCode(e.target.value)}
-        />
-        <button className="btn" disabled={busy || !inviteCode} onClick={() => void googleLogin()}>
-          Continuar com Google
-        </button>
-        <hr style={{ borderColor: 'var(--border)', width: '100%' }} />
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail" />
-        <input
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          placeholder="Nome de exibição"
-        />
-        <button className="btn secondary" disabled={busy} onClick={() => void devLogin()}>
-          Login de desenvolvimento
-        </button>
+        <div className="login-tabs">
+          <button
+            type="button"
+            className={mode === 'login' ? 'active' : ''}
+            onClick={() => {
+              setMode('login');
+              setError(null);
+            }}
+          >
+            Entrar
+          </button>
+          <button
+            type="button"
+            className={mode === 'register' ? 'active' : ''}
+            onClick={() => {
+              setMode('register');
+              setError(null);
+            }}
+          >
+            Cadastrar
+          </button>
+        </div>
+
+        {mode === 'login' ? (
+          <>
+            <p>Entre com e-mail e senha.</p>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="E-mail"
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Senha"
+            />
+            <button className="btn" disabled={busy || !email || !password} onClick={() => void login()}>
+              Entrar
+            </button>
+          </>
+        ) : (
+          <>
+            <p>Crie sua conta com convite e verificação de e-mail.</p>
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Usuário"
+            />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="E-mail"
+            />
+            <div className="login-inline">
+              <button
+                type="button"
+                className="btn secondary"
+                disabled={busy || !email}
+                onClick={() => void sendVerificationCode()}
+              >
+                Enviar código
+              </button>
+              {codeSent && <span className="login-hint">Código enviado</span>}
+            </div>
+            <input
+              value={verificationToken}
+              onChange={(e) => setVerificationToken(e.target.value)}
+              placeholder="Código de verificação (6 dígitos)"
+              inputMode="numeric"
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Senha"
+            />
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirmar senha"
+            />
+            <input
+              placeholder="Código de convite"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value)}
+            />
+            <button
+              className="btn"
+              disabled={
+                busy ||
+                !inviteCode ||
+                !email ||
+                !displayName ||
+                !password ||
+                !verificationToken
+              }
+              onClick={() => void register()}
+            >
+              Criar conta
+            </button>
+          </>
+        )}
+
         {error && <div className="error">{error}</div>}
       </div>
     </div>

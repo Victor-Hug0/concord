@@ -2,6 +2,7 @@
   "name": "@concord/desktop",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Concord — comunicação em tempo real",
   "author": {
     "name": "Victor Hugo",
@@ -74,7 +75,14 @@
     "flatpak": {
       "runtimeVersion": "24.08",
       "baseVersion": "24.08",
+      "license": "MIT",
       "artifactName": "concord-${version}-${arch}.${ext}",
+      "files": [
+        [
+          "build/flatpak/app.concord.desktop.metainfo.xml",
+          "/share/metainfo/app.concord.desktop.metainfo.xml"
+        ]
+      ],
       "finishArgs": [
         "--socket=wayland",
         "--socket=x11",

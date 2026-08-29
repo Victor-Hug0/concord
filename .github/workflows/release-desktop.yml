@@ -102,7 +102,7 @@ jobs:
         if: matrix.script == 'release:linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder elfutils
+          sudo apt-get install -y flatpak flatpak-builder elfutils appstream
           sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           sudo flatpak install -y --noninteractive flathub \
             org.freedesktop.Platform//24.08 \

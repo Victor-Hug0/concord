@@ -2,7 +2,8 @@
 
 ## Autenticação
 
-- Google OAuth + convite obrigatório para novos usuários
+- Cadastro com e-mail/senha + código de verificação por e-mail
+- Convite obrigatório para novos usuários
 - Access JWT curto + refresh rotativo (SHA-256 do token no banco), TTL ~30 dias
 - Logout revoga a sessão
 - Guard global JWT; rotas públicas marcadas com `@Public()`
@@ -29,5 +30,4 @@
 ## Riscos conhecidos
 
 - Upload de 500 MB: timeouts de proxy; ajuste `client_max_body_size` / Caddy
-- OAuth desktop: deep link `concord://` precisa estar registrado
 - Mesh WebRTC com 10 usuários + várias telas: alto uso de banda no cliente
